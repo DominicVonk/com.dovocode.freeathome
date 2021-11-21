@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+
+    <script type="text/javascript" src="/homey.js" data-origin="settings"></script>
+</head>
+
+<body>
+    <h1 data-i18n="settings.title">
+        <!-- This will be filled with the translated string with key 'settings.title'. -->
+    </h1>
+    <p data-i18n="settings.subtitle">
+        <!-- This field will also be translated -->
+    </p>
+
+    <fieldset>
+        <legend>My Settings</legend>
+        <div class="field row">
+            <label for="ip">Free@Home IP</label>
+            <input id="ip" type="text" value="" />
+        </div>
+        <div class="field row">
+            <label for="username">Username</label>
+            <input id="username" type="text" value="" />
+        </div>
+        <div class="field row">
+            <label for="password">Password</label>
+            <input id="password" type="password" value="" />
+        </div>
+    </fieldset>
+    <button id="save" class="right">Save changes</button>
+    <script type="text/javascript">
+        function onHomeyReady(Homey) {
+
+            Homey.ready();
+
+            var usernameElement = document.getElementById("username");
+            var passwordElement = document.getElementById("password");
+            var ipElement = document.getElementById("ip");
+            var saveElement = document.getElementById("save");
+            Homey.get("username", function (err, username) {
+                if (err) return Homey.alert(err);
+                usernameElement.value = username;
+            });
+            Homey.get("password", function (err, password) {
+                if (err) return Homey.alert(err);
+                passwordElement.value = password;
+            });
+            Homey.get("ip", function (err, ip) {
+                if (err) return Homey.alert(err);
+                ipElement.value = ip;
+            });
+            saveElement.addEventListener("click", function (e) {
+                Homey.set("username", usernameElement.value, function (err) {
+                    if (err) return Homey.alert(err);
+                });
+                Homey.set("password", passwordElement.value, function (err) {
+                    if (err) return Homey.alert(err);
+                });
+                Homey.set("ip", ipElement.value, function (err) {
+                    if (err) return Homey.alert(err);
+                });
+            });
+        }
+    </script>
+</body>
+
+</html>

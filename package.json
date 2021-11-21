@@ -1,0 +1,17 @@
+{
+  "name": "com.dovocode.freeathome",
+  "version": "1.0.0",
+  "main": "app.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "@tsconfig/node12": "^1.0.9",
+    "@types/homey": "npm:homey-apps-sdk-v3-types@^0.2.2",
+    "@types/node": "^16.11.9",
+    "typescript": "^4.5.2"
+  },
+  "dependencies": {
+    "freeathome-api": "^1.1.1"
+  }
+}
