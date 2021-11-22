@@ -8,17 +8,23 @@ class MyDevice extends Homey.Device {
    */
   async onInit () {
     this.log('MyDevice has been initialized');
+    await new Promise(r => setTimeout(r, 5000))
+    let initData = await ((this.homey.app as MyApp)._client?.getAllDevices());
+
+    let datapoints = this.getData().datapoints;
+    if (initData?.[this.getData().id]?.channels[this.getData().channel]) {
+      datapoints = initData[this.getData().id].channels[this.getData().channel].datapoints;
+    }
 
     this.registerCapabilityListener("onoff", async (value) => {
       await (this.homey.app as MyApp)._client?.set(this.getData().id, this.getData().channel, 'idp0000', value ? '1' : '0');
     });
 
-    this.setCapabilityValue("onoff", this.getData().datapoints['idp0000'] === '1');
+    this.setCapabilityValue("onoff", datapoints['idp0000'] === '1');
     await (this.homey.app as MyApp)._client?.addEventListener(this.event.bind(this))
   }
 
   async event (message: any) {
-    this.log(message)
     if (message.type === 'update') {
       if (this.getData().id in message.result) {
         if (message?.result?.[this.getData().id]?.channels[this.getData().channel]?.datapoints?.['idp0000'] !== undefined) {

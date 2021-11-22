@@ -16,7 +16,7 @@ class MyApp extends Homey.App {
     this._client = new FreeAtHomeApi(ip, username, password);
 
 
-    this._client?.start();
+    await this._client?.start();
     this.homey.settings.on("set", this._reconnectClient.bind(this));
   }
   getClient () {
