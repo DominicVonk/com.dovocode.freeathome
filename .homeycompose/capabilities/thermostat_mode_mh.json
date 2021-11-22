@@ -58,7 +58,7 @@
                 },
                 "args": [
                     {
-                        "name": "thermostat_mode",
+                        "name": "thermostat_mode_mh",
                         "type": "dropdown",
                         "values": [
                             {
@@ -96,7 +96,7 @@
                 },
                 "args": [
                     {
-                        "name": "thermostat_mode",
+                        "name": "thermostat_mode_mh",
                         "type": "dropdown",
                         "values": [
                             {
@@ -134,7 +134,7 @@
                 },
                 "args": [
                     {
-                        "name": "thermostat_mode",
+                        "name": "thermostat_mode_mh",
                         "type": "dropdown",
                         "values": [
                             {

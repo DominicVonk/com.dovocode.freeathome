@@ -6,7 +6,7 @@
   "capabilities": [
     "target_temperature",
     "measure_temperature",
-    "thermostat_mode",
+    "thermostat_mode_mh",
     "onoff"
   ],
   "platforms": [

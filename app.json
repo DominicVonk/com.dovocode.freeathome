@@ -67,7 +67,7 @@
       "capabilities": [
         "target_temperature",
         "measure_temperature",
-        "thermostat_mode",
+        "thermostat_mode_mh",
         "onoff"
       ],
       "platforms": [
@@ -96,7 +96,19 @@
     }
   ],
   "capabilities": {
-    "thermostat_mode": {
+    "target_temperature": {
+      "type": "number",
+      "title": {
+        "en": "Target temperature"
+      },
+      "uiComponent": "thermostat",
+      "getable": true,
+      "setable": true,
+      "min": 7,
+      "max": 35,
+      "step": 0.5
+    },
+    "thermostat_mode_mh": {
       "type": "enum",
       "title": {
         "en": "Thermostat mode",

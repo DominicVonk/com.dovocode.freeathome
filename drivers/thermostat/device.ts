@@ -23,7 +23,7 @@ class MyDevice extends Homey.Device {
       this.log(this.getData());
       await (this.homey.app as MyApp)._client?.set(this.getData().id, this.getData().channel, 'idp0012', value ? '1' : '0');
     });
-    this.registerCapabilityListener("thermostat_mode", async (value) => {
+    this.registerCapabilityListener("thermostat_mode_mh", async (value) => {
       this.log(this.getData());
       await (this.homey.app as MyApp)._client?.set(this.getData().id, this.getData().channel, 'idp0011', value);
     });
@@ -34,7 +34,7 @@ class MyDevice extends Homey.Device {
 
     this.log(datapoints);
     this.setCapabilityValue("onoff", datapoints['odp0008'] === '1');
-    this.setCapabilityValue("thermostat_mode", (datapoints['odp0009'] == '68' ? 1 : 0).toString());
+    this.setCapabilityValue("thermostat_mode_mh", (datapoints['odp0009'] == '68' ? 1 : 0).toString());
     this.setCapabilityValue("measure_temperature", Math.round(datapoints['odp0010'] * 10) / 10)
     this.setCapabilityValue("target_temperature", Math.round(datapoints['odp0006'] * 10) / 10)
     await (this.homey.app as MyApp)._client?.addEventListener(this.event.bind(this))
@@ -48,7 +48,7 @@ class MyDevice extends Homey.Device {
           this.setCapabilityValue("onoff", message.result[this.getData().id].channels[this.getData().channel].datapoints['odp0008'] === '1');
         }
         if (message?.result?.[this.getData().id]?.channels[this.getData().channel]?.datapoints?.['odp0009'] !== undefined) {
-          this.setCapabilityValue("thermostat_mode", (message.result[this.getData().id].channels[this.getData().channel].datapoints['odp0009'] == '68' ? 1 : 0).toString());
+          this.setCapabilityValue("thermostat_mode_mh", (message.result[this.getData().id].channels[this.getData().channel].datapoints['odp0009'] == '68' ? 1 : 0).toString());
         }
         if (message?.result?.[this.getData().id]?.channels[this.getData().channel]?.datapoints?.['odp0006'] !== undefined) {
           this.setCapabilityValue("target_temperature", Math.round(message.result[this.getData().id].channels[this.getData().channel].datapoints['odp0006'] * 10) / 10);
