@@ -1,3 +1,4 @@
+import { Light, LightEvent } from '@dominicvonk/freeathome-devices';
 import Homey from 'homey';
 import MyApp from '../../app';
 
@@ -7,33 +8,27 @@ class MyDevice extends Homey.Device {
    * onInit is called when the device is initialized.
    */
   async onInit () {
+
     this.log('MyDevice has been initialized');
-    await new Promise(r => setTimeout(r, 5000))
-    let initData = await ((this.homey.app as MyApp)._client?.getAllDevices());
+    let light: Light = (((this.homey.app as MyApp)._client?.getDevice(this.getData().serialNumber, this.getData().channel) as Light));
+    if (light) {
+      let isOn = light.isOn();
 
-    let datapoints = this.getData().datapoints;
-    if (initData?.[this.getData().id]?.channels[this.getData().channel]) {
-      datapoints = initData[this.getData().id].channels[this.getData().channel].datapoints;
+      this.registerCapabilityListener("onoff", async (value) => {
+        value ? await light.turnOn() : await light.turnOff();
+      });
+
+      this.setCapabilityValue("onoff", isOn);
+      light.on(LightEvent.TURNED_ON, () => {
+        this.setCapabilityValue("onoff", true);
+      })
+
+      light.on(LightEvent.TURNED_OFF, () => {
+        this.setCapabilityValue("onoff", false);
+      })
     }
-
-    this.registerCapabilityListener("onoff", async (value) => {
-      await (this.homey.app as MyApp)._client?.set(this.getData().id, this.getData().channel, 'idp0000', value ? '1' : '0');
-    });
-
-    this.setCapabilityValue("onoff", datapoints['idp0000'] === '1');
-    await (this.homey.app as MyApp)._client?.addEventListener(this.event.bind(this))
   }
 
-  async event (message: any) {
-    if (message.type === 'update') {
-      if (this.getData().id in message.result) {
-        if (message?.result?.[this.getData().id]?.channels[this.getData().channel]?.datapoints?.['idp0000'] !== undefined) {
-          this.setCapabilityValue("onoff", message.result[this.getData().id].channels[this.getData().channel].datapoints['idp0000'] === '1');
-        }
-      }
-    }
-
-  }
   /**
    * onAdded is called when the user adds the device, called just after pairing.
    */
@@ -67,7 +62,6 @@ class MyDevice extends Homey.Device {
    */
   async onDeleted () {
     this.log('MyDevice has been deleted');
-    await (this.homey.app as MyApp)._client?.removeEventListener(this.event.bind(this))
   }
 
 }

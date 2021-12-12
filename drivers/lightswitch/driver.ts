@@ -1,3 +1,4 @@
+import { SchakelAktor, SubDevice } from '@dominicvonk/freeathome-devices';
 import Homey from 'homey';
 import MyApp from '../../app';
 class MyDriver extends Homey.Driver {
@@ -16,38 +17,21 @@ class MyDriver extends Homey.Driver {
    */
   async onPairListDevices () {
     let client = (this.homey.app as MyApp).getClient();
-    return Object.values(await client?.getAllDevices()).flatMap((device: any) => {
-      if (device.typeName === 'Sensor/ Schaltaktor 1/1-fach' || device.typeName === 'Sensor/ Schaltaktor 2/2-fach') {
-        return Object.entries(device.channels).map(([k, v]: [string, any]) => {
-          if (v?.displayName) {
-            return {
-              name: `${v?.displayName}`,
-              data: {
-                id: device.serialNumber,
-                channel: k,
-                datapoints: v.datapoints
-              }
-            }
+    return (client?.getAllDevices() || [])?.map((device: SubDevice) => {
+      if (device instanceof SchakelAktor && device?.serialNumber && device?.channel) {
+        return {
+          name: 'F@H ' + device.getDisplayName(),
+          data: {
+            serialNumber: device.serialNumber,
+            channel: device.channel
           }
-        }).filter((e: any) => e)
+        }
       } else {
-        return [];
+        return null;
       }
-    });
-    return [
-      // Example device data, note that `store` is optional
-      // {
-      //   name: 'My Device',
-      //   data: {
-      //     id: 'my-device',
-      //   },
-      //   store: {
-      //     address: '127.0.0.1',
-      //   },
-      // },
-    ];
-  }
+    })?.filter((e: any) => e);
 
+  }
 }
 
 module.exports = MyDriver;

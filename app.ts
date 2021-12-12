@@ -12,29 +12,23 @@ class MyApp extends Homey.App {
     const username = this.homey.settings.get('username');
     const password = this.homey.settings.get('password');
     const ip = this.homey.settings.get('ip');
+    if (username && password && ip) {
+      this._client = new FreeAtHomeApi(ip, username, password);
+      await this._client.ready();
+    }
 
-    this._client = new FreeAtHomeApi(ip, username, password);
-
-
-    await this._client?.start();
     this.homey.settings.on("set", this._reconnectClient.bind(this));
   }
   getClient () {
     return this._client;
   }
   _reconnectClient (arg: any) {
-    console.log("settings updated.... reconnecting");
-    if (this._client?._connected) {
-      this._client.stop();
-    }
     const username = this.homey.settings.get('username');
     const password = this.homey.settings.get('password');
     const ip = this.homey.settings.get('ip');
 
     this._client = new FreeAtHomeApi(ip, username, password);
-
-
-    this._client?.start();
+    this._client.ready();
   }
 
 }

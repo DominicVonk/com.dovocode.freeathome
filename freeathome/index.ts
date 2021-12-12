@@ -1,91 +1,68 @@
 "use strict";
-const { SystemAccessPoint } = require("freeathome-api");
+
+import { Device, DeviceManager, SubDevice } from "@dominicvonk/freeathome-devices";
+import { ConnectionEvent } from "@dominicvonk/freeathome-devices/dist/Connection";
+import { BridgeDevice } from "@dominicvonk/freeathome-devices/dist/hardware/BridgeDevice";
+
+
+
 export class FreeAtHomeApi {
-    systemAccessPoint: typeof SystemAccessPoint;
-    _connected: boolean;
-    _functions: any;
+    deviceManager: DeviceManager;
+    _config: {
+        hostname: string,
+        username: string,
+        password: string,
+    };
     constructor (ip: string, username: string, password: string) {
-        this._connected = false
-        this._functions = [];
-        const config = {
+        this._config = {
             hostname: ip,
             username: username,
             password: password,
         };
-
-        this.systemAccessPoint = new SystemAccessPoint(
-            config,
-            this,      // instance to report broadcastMessages
+        this.deviceManager = new DeviceManager(
+            this._config,
+            console,      // instance to report broadcastMessages
+            true,
+            60 * 1000
         );
     }
 
-    addEventListener (func: any) {
-        this._functions.push(func);
+    async ready () {
+        return await new Promise(r => this.deviceManager.on(ConnectionEvent.DEVICES, () => r(true)));
     }
-    removeEventListener (func: any) {
-        this._functions = this._functions.filter((f:any) => f !== func);
-    }
-    async start () {
-        console.log("Starting free@home API");
 
+    getAllDevices (): SubDevice[] | null {
+        console.log("Getting device info");
         try {
-            await this.systemAccessPoint.connect();
-            this._connected = true
+            const response: SubDevice[] = this.deviceManager.getDevices().flatMap((device: Device) => {
+                if (device instanceof BridgeDevice) {
+                    let devices: SubDevice[] = ((device as BridgeDevice).getSubDevices() as SubDevice[]);
+                    let Xdevices = devices.map((subDevice: SubDevice) => {
+                        if (subDevice) {
+                            console.log('SubDevice', subDevice.channel, subDevice.serialNumber);
+                            return this.deviceManager.getDevice(subDevice.serialNumber, subDevice.channel)
+                        }
+                        return null;
+                    });
+                    devices = (Xdevices.filter(e => e !== null) as SubDevice[]);
+                    return devices;
+                }
+                return [];
+            });
+            return response;
         } catch (e) {
-            console.error("Could not connect to SysAp: ", e);
-            this._connected = false
+            console.error("Error getting device data", e);
         }
+        return null;
     }
 
-    async stop () {
-        if (this._connected) {
-            console.log("Stopping free@home API")
-            await this.systemAccessPoint.disconnect()
-            this._connected = false
+    getDevice (serialNumber: string, channel: string): SubDevice | null {
+        try {
+            const response = this.deviceManager.getDevice(serialNumber, channel);
+            return response;
+        } catch (e) {
+            console.error("Error getting device data", e);
         }
-    }
-
-    /**
-     * @param message
-     */
-    broadcastMessage (message: any) {
-        // Do nothing when receiving a message from SysAccessPoint
-        this._functions.forEach((f:any) => f(message));
-    }
-
-    async getAllDevices () {
-        if (this._connected) {
-            console.log("Getting device info");
-            try {
-                const response = await this.systemAccessPoint.getDeviceData();
-                console.log(response);
-                return response;
-            } catch (e) {
-                console.error("Error getting device data", e);
-                return {};
-            }
-        }
-    }
-
-    /**
-     *
-     * @param deviceId
-     * @param channel
-     * @param dataPoint
-     * @param value
-     * @returns {Promise<void>}
-     */
-    async set (deviceId: any, channel: any, dataPoint: any, value: any) {
-        console.log(
-            `Setting (device, channel, datapoint, value): ${deviceId}, ${channel}, ${dataPoint}, ${value}`
-        );
-        if (this._connected) {
-            return await this.systemAccessPoint.setDatapoint(
-                deviceId.toString(),
-                channel.toString(),
-                dataPoint.toString(),
-                value.toString()
-            );
-        }
+        return null;
     }
 };
