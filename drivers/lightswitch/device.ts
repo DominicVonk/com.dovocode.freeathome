@@ -9,21 +9,25 @@ class MyDevice extends Homey.Device {
    */
   async onInit () {
 
-    this.log('MyDevice has been initialized');
     let light: Light = (((this.homey.app as MyApp)._client?.getDevice(this.getData().serialNumber, this.getData().channel) as Light));
+
     if (light) {
+      this.log(this.getName() + ' initialized');
       let isOn = light.isOn();
 
       this.registerCapabilityListener("onoff", async (value) => {
+        this.log(this.getName() + ' ' + value);
         value ? await light.turnOn() : await light.turnOff();
       });
 
       this.setCapabilityValue("onoff", isOn);
       light.on(LightEvent.TURNED_ON, () => {
+        this.log(this.getName() + ' on');
         this.setCapabilityValue("onoff", true);
       })
 
       light.on(LightEvent.TURNED_OFF, () => {
+        this.log(this.getName() + ' off');
         this.setCapabilityValue("onoff", false);
       })
     }

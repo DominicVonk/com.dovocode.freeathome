@@ -17,7 +17,6 @@ class MyDriver extends Homey.Driver {
    */
   async onPairListDevices () {
     let client = (this.homey.app as MyApp).getClient();
-    await new Promise((r) => setTimeout(() => r(0), 5000))
     return (client?.getAllDevices() || [])?.map((device: SubDevice) => {
       if (device instanceof Thermostat && device?.serialNumber && device?.channel) {
         return {
