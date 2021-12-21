@@ -22,13 +22,13 @@ class MyApp extends Homey.App {
   getClient () {
     return this._client;
   }
-  _reconnectClient (arg: any) {
+  async _reconnectClient (arg: any) {
     const username = this.homey.settings.get('username');
     const password = this.homey.settings.get('password');
     const ip = this.homey.settings.get('ip');
 
     this._client = new FreeAtHomeApi(ip, username, password);
-    this._client.ready();
+    await this._client.ready();
   }
 
 }

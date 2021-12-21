@@ -3,10 +3,11 @@
 import { Device, DeviceManager, SubDevice } from "@dominicvonk/freeathome-devices";
 import { ConnectionEvent } from "@dominicvonk/freeathome-devices/dist/Connection";
 import { BridgeDevice } from "@dominicvonk/freeathome-devices/dist/hardware/BridgeDevice";
+import EventEmitter from "events";
 
 
 
-export class FreeAtHomeApi {
+export class FreeAtHomeApi extends EventEmitter {
     deviceManager: DeviceManager;
     _config: {
         hostname: string,
@@ -14,6 +15,7 @@ export class FreeAtHomeApi {
         password: string,
     };
     constructor (ip: string, username: string, password: string) {
+        super();
         this._config = {
             hostname: ip,
             username: username,
@@ -25,10 +27,23 @@ export class FreeAtHomeApi {
             true,
             60 * 1000
         );
+        this.deviceManager.on(ConnectionEvent.DEVICES, () => {
+            this.emit(ConnectionEvent.DEVICES);
+        })
+
+
+        this.setMaxListeners(400);
+
     }
 
     async ready () {
-        return await new Promise(r => this.deviceManager.on(ConnectionEvent.DEVICES, () => r(true)));
+        let self = this;
+
+        return new Promise(r =>
+            this.deviceManager.on(ConnectionEvent.DEVICES, function event () {
+                self.deviceManager.off(ConnectionEvent.DEVICES, event);
+                r(true);
+            }.bind(this)));
     }
 
     getAllDevices (): SubDevice[] | null {

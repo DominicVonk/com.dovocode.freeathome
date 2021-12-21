@@ -1,36 +1,56 @@
+import { ConnectionEvent } from '@dominicvonk/freeathome-devices/dist/Connection';
 import { Light, LightEvent } from '@dominicvonk/freeathome-devices';
 import Homey from 'homey';
 import MyApp from '../../app';
 
 class MyDevice extends Homey.Device {
 
+  lastbinds: {
+    light?: Light
+  } = {};
+
+  self: MyDevice | null = null;
+
   /**
    * onInit is called when the device is initialized.
    */
   async onInit () {
+    this.self = this;
+    this.rebind();
+    this.registerCapabilityListener("onoff", async (value) => {
+      this.log(this.getName() + ' ' + value);
+      value ? await this.lastbinds.light?.turnOn() : await this.lastbinds.light?.turnOff();
+    });
+    (((this.homey.app as MyApp)._client?.on(ConnectionEvent.DEVICES, () => this.self?.rebind.call(this.self))));
+  }
 
+  rebind () {
+
+    if (this.lastbinds?.light) {
+      this.lastbinds?.light.removeAllListeners(LightEvent.TURNED_ON);
+      this.lastbinds?.light.removeAllListeners(LightEvent.TURNED_OFF);
+    }
     let light: Light = (((this.homey.app as MyApp)._client?.getDevice(this.getData().serialNumber, this.getData().channel) as Light));
 
-    if (light) {
-      this.log(this.getName() + ' initialized');
-      let isOn = light.isOn();
+    this.self?.log(this.getName() + ' initialized');
+    let isOn = light.isOn();
 
-      this.registerCapabilityListener("onoff", async (value) => {
-        this.log(this.getName() + ' ' + value);
-        value ? await light.turnOn() : await light.turnOff();
-      });
 
-      this.setCapabilityValue("onoff", isOn);
-      light.on(LightEvent.TURNED_ON, () => {
-        this.log(this.getName() + ' on');
-        this.setCapabilityValue("onoff", true);
-      })
 
-      light.on(LightEvent.TURNED_OFF, () => {
-        this.log(this.getName() + ' off');
-        this.setCapabilityValue("onoff", false);
-      })
-    }
+    this.self?.setCapabilityValue("onoff", isOn);
+
+
+    this.lastbinds.light = light;
+    light.on(LightEvent.TURNED_ON, () => {
+      this.self?.log(this.getName() + ' on');
+      this.self?.setCapabilityValue("onoff", true);
+    })
+
+
+    light.on(LightEvent.TURNED_OFF, () => {
+      this.self?.log(this.getName() + ' off');
+      this.self?.setCapabilityValue("onoff", false);
+    })
   }
 
   /**
