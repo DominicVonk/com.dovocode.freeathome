@@ -1,7 +1,6 @@
-import { SubDevice, Thermostat, ThermostatDevice } from '@dominicvonk/freeathome-devices';
+import { Thermostat } from '@dominicvonk/fah/dist/Thermostat';
 import Homey from 'homey';
 import MyApp from '../../app';
-
 class MyDriver extends Homey.Driver {
 
   /**
@@ -9,6 +8,7 @@ class MyDriver extends Homey.Driver {
    */
   async onInit () {
     this.log('MyDriver has been initialized');
+
   }
 
   /**
@@ -17,12 +17,12 @@ class MyDriver extends Homey.Driver {
    */
   async onPairListDevices () {
     let client = (this.homey.app as MyApp).getClient();
-    return (client?.getAllDevices() || [])?.map((device: SubDevice) => {
-      if (device instanceof Thermostat && device?.serialNumber && device?.channel) {
+    return ((client?.devices || [])?.filter(device => device instanceof Thermostat) as Thermostat[])?.map((device: Thermostat) => {
+      if (device?.id && device?.channel) {
         return {
-          name: device.getDisplayName(),
+          name: 'F@H ' + device.name,
           data: {
-            serialNumber: device.serialNumber,
+            serialNumber: device.id,
             channel: device.channel
           }
         }
@@ -32,7 +32,6 @@ class MyDriver extends Homey.Driver {
     })?.filter((e: any) => e);
 
   }
-
 }
 
 module.exports = MyDriver;

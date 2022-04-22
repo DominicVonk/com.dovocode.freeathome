@@ -1,4 +1,4 @@
-import { FreeAtHomeApi } from './freeathome/index';
+import { Client } from '@dominicvonk/fah';
 import Homey from 'homey';
 
 class MyApp extends Homey.App {
@@ -6,15 +6,15 @@ class MyApp extends Homey.App {
   /**
    * onInit is called when the app is initialized.
    */
-  _client?: FreeAtHomeApi;
+  _client?: Client;
   async onInit () {
     this.log('MyApp has been initialized');
     const username = this.homey.settings.get('username');
     const password = this.homey.settings.get('password');
     const ip = this.homey.settings.get('ip');
+    this._client = new Client(ip, username, password);
     if (username && password && ip) {
-      this._client = new FreeAtHomeApi(ip, username, password);
-      await this._client.ready();
+      await this._client.start();
     }
 
     this.homey.settings.on("set", this._reconnectClient.bind(this));
@@ -27,8 +27,7 @@ class MyApp extends Homey.App {
     const password = this.homey.settings.get('password');
     const ip = this.homey.settings.get('ip');
 
-    this._client = new FreeAtHomeApi(ip, username, password);
-    await this._client.ready();
+    await this._client?.updateLogin(ip, username, password);
   }
 
 }

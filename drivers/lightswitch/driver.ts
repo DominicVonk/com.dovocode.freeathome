@@ -1,4 +1,4 @@
-import { SchakelAktor, SubDevice } from '@dominicvonk/freeathome-devices';
+import { Switch } from '@dominicvonk/fah/dist/Switch';
 import Homey from 'homey';
 import MyApp from '../../app';
 class MyDriver extends Homey.Driver {
@@ -17,12 +17,12 @@ class MyDriver extends Homey.Driver {
    */
   async onPairListDevices () {
     let client = (this.homey.app as MyApp).getClient();
-    return (client?.getAllDevices() || [])?.map((device: SubDevice) => {
-      if (device instanceof SchakelAktor && device?.serialNumber && device?.channel) {
+    return ((client?.devices || [])?.filter(device => device instanceof Switch) as Switch[])?.map((device: Switch) => {
+      if (device?.id && device?.channel) {
         return {
-          name: 'F@H ' + device.getDisplayName(),
+          name: 'F@H ' + device.name,
           data: {
-            serialNumber: device.serialNumber,
+            serialNumber: device.id,
             channel: device.channel
           }
         }

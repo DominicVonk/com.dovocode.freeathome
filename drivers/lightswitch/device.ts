@@ -2,56 +2,46 @@ import { ConnectionEvent } from '@dominicvonk/freeathome-devices/dist/Connection
 import { Light, LightEvent } from '@dominicvonk/freeathome-devices';
 import Homey from 'homey';
 import MyApp from '../../app';
+import { Switch } from '@dominicvonk/fah/dist/Switch';
 
 class MyDevice extends Homey.Device {
-
-  lastbinds: {
-    light?: Light
-  } = {};
-
-  self: MyDevice | null = null;
 
   /**
    * onInit is called when the device is initialized.
    */
   async onInit () {
-    this.self = this;
-    this.rebind();
+
+    let light: Switch = (((this.homey.app as MyApp)._client?.devices?.find(e => e.id == this.getData().serialNumber && e.channel == this.getData().channel)) as Switch)!;
     this.registerCapabilityListener("onoff", async (value) => {
       this.log(this.getName() + ' ' + value);
-      value ? await this.lastbinds.light?.turnOn() : await this.lastbinds.light?.turnOff();
+      if (value) {
+        await light.turnOn();
+      }
+      else {
+        await light.turnOff();
+      }
     });
-    (((this.homey.app as MyApp)._client?.on(ConnectionEvent.DEVICES, () => this.self?.rebind.call(this.self))));
-  }
 
-  rebind () {
-
-    if (this.lastbinds?.light) {
-      this.lastbinds?.light.removeAllListeners(LightEvent.TURNED_ON);
-      this.lastbinds?.light.removeAllListeners(LightEvent.TURNED_OFF);
-    }
-    let light: Light = (((this.homey.app as MyApp)._client?.getDevice(this.getData().serialNumber, this.getData().channel) as Light));
-
-    this.self?.log(this.getName() + ' initialized');
+    this.log(this.getName() + ' initialized');
     let isOn = light.isOn();
 
 
 
-    this.self?.setCapabilityValue("onoff", isOn);
+    this.setCapabilityValue("onoff", isOn);
 
 
-    this.lastbinds.light = light;
-    light.on(LightEvent.TURNED_ON, () => {
-      this.self?.log(this.getName() + ' on');
-      this.self?.setCapabilityValue("onoff", true);
+    light.on(Switch.TURNED_ON, () => {
+      this.log(this.getName() + ' on');
+      this.setCapabilityValue("onoff", true);
     })
 
 
-    light.on(LightEvent.TURNED_OFF, () => {
-      this.self?.log(this.getName() + ' off');
-      this.self?.setCapabilityValue("onoff", false);
+    light.on(Switch.TURNED_OFF, () => {
+      this.log(this.getName() + ' off');
+      this.setCapabilityValue("onoff", false);
     })
   }
+
 
   /**
    * onAdded is called when the user adds the device, called just after pairing.
