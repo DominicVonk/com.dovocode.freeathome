@@ -14,7 +14,10 @@ class MyApp extends Homey.App {
     const ip = this.homey.settings.get('ip');
     this._client = new Client(ip, username, password);
     if (username && password && ip) {
-      await this._client.start();
+      try {
+        await this._client.start();
+      } catch (error) {
+      }
     }
 
     this.homey.settings.on("set", this._reconnectClient.bind(this));
@@ -26,8 +29,11 @@ class MyApp extends Homey.App {
     const username = this.homey.settings.get('username');
     const password = this.homey.settings.get('password');
     const ip = this.homey.settings.get('ip');
+    try {
+      await this._client?.updateLogin(ip, username, password);
+    } catch {
 
-    await this._client?.updateLogin(ip, username, password);
+    }
   }
 
 }
