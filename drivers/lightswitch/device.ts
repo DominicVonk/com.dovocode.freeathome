@@ -1,5 +1,3 @@
-import { ConnectionEvent } from '@dominicvonk/freeathome-devices/dist/Connection';
-import { Light, LightEvent } from '@dominicvonk/freeathome-devices';
 import Homey from 'homey';
 import MyApp from '../../app';
 import { Switch } from '@dominicvonk/fah/dist/Switch';
