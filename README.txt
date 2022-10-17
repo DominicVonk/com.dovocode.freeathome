@@ -1,1 +1,1 @@
-Adds support for Free@Home
+Adds support for Free@Home lightswitches and temperature controller
