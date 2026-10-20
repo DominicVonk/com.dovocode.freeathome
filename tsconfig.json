@@ -3,16 +3,27 @@
     "target": "es2020",
     "module": "commonjs",
     "moduleResolution": "node",
-    "outDir": "build/",
-    "declaration": true,
+    "outDir": "./.homeybuild",
+    "declaration": false,
     "strict": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "allowJs": true,
     "resolveJsonModule": true,
-    "types": ["node", "homey"]
+    "types": [
+      "node",
+      "homey"
+    ]
   },
-  "include": ["lib/**/*.ts", "app.ts", "drivers/**/*.ts"],
-  "exclude": ["node_modules", "build"]
+  "include": [
+    "lib/**/*.ts",
+    "app.ts",
+    "drivers/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "build",
+    ".homeybuild"
+  ]
 }

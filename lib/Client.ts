@@ -1,3 +1,6 @@
+import { EventEmitter } from 'events';
+import ws from 'ws';
+import fetch from 'node-fetch';
 import { Switch } from './Switch';
 import { Dimmer } from './Dimmer';
 import { Thermostat } from './Thermostat';
@@ -6,337 +9,217 @@ import { Shutter } from './Shutter';
 import { Blind } from './Blind';
 import { MovementDetector } from './MovementDetector';
 import { ContactSensor } from './ContactSensor';
-import ws from 'ws';
-import fetch from 'node-fetch';
+import { ResourceDevice } from './ResourceDevice';
+import { isRecord, parseConfiguration, scalar } from './protocol';
 
-/** Base type for all free@home device classes */
-export type Device =
-  | Switch
-  | Dimmer
-  | Thermostat
-  | SceneSensor
-  | Shutter
-  | Blind
-  | MovementDetector
-  | ContactSensor;
+export type Device = Switch | Dimmer | Thermostat | SceneSensor | Shutter | Blind | MovementDetector | ContactSensor;
+const models: Record<string, new (client: Client, configuration: import('./protocol').Channel) => Device> = {
+  '0006': SceneSensor, '0007': Switch, '0012': Dimmer, '0023': Thermostat,
+  '0009': Shutter, '0061': Blind, '0011': MovementDetector, '000F': ContactSensor,
+};
+export class Client extends EventEmitter {
+  devices: Device[] = [];
+  connected = false;
+  connectionError = 'Configure the System Access Point and local API credentials in app settings.';
+  discoverySummary = 'No configuration has been loaded yet.';
+  private connection?: ws;
+  private reconnectTimer?: ReturnType<typeof setTimeout>;
+  private heartbeat?: ReturnType<typeof setInterval>;
+  private reconnectDelay = 1000;
+  private active = false;
+  private generation = 0;
+  private refreshing?: Promise<void>;
+  private connecting?: Promise<void>;
+  private requests = new Set<AbortController>();
+  private bufferedUpdates?: Array<{ systemId: string; parts: string[]; value: string }>;
+  constructor(public host: string, public username: string, public password: string) { super(); }
 
-/**
- * free@home function IDs (hex, as returned by the SysAP configuration API).
- * The API returns functionID as a 4-char lowercase hex string, e.g. "0007".
- * We compare the upper-cased, zero-padded value.
- */
-const FID = {
-  SCENE_SENSOR: '0006',          // 0x006
-  SWITCH_ACTUATOR: '0007',       // 0x007
-  SHUTTER_ACTUATOR: '0009',      // 0x009
-  WINDOW_DOOR_SENSOR: '000F',   // 0x00F
-  MOVEMENT_DETECTOR: '0011',     // 0x011
-  DIMMING_ACTUATOR: '0012',      // 0x012
-  BLIND_ACTUATOR: '0061',        // 0x061
-  ROOM_TEMP_CONTROLLER: '0023',  // 0x023 (35 decimal — NOT "23"!)
-} as const;
-
-/** Maximum websocket reconnect backoff (ms) */
-const MAX_RECONNECT_DELAY = 30000;
-/** Initial websocket reconnect backoff (ms) */
-const INITIAL_RECONNECT_DELAY = 1000;
-
-export class Client {
-  _login: string = '';
-  devices?: Device[];
-
-  _connection?: ws;
-  private _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private _reconnectDelay = INITIAL_RECONNECT_DELAY;
-  private _shouldReconnect = true;
-
-  constructor(
-    public host: string,
-    public username: string,
-    public password: string,
-  ) {
-    if (host && username && password) {
-      this._login =
-        'Basic ' +
-        Buffer.from(username + ':' + password, 'utf8').toString('base64');
+  private baseUrl(): URL {
+    let url: URL;
+    try { url = new URL(this.host.includes('://') ? this.host : `http://${this.host}`); }
+    catch { throw new Error('Enter a valid System Access Point IP address or hostname.'); }
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
+      throw new Error('Use a System Access Point host or HTTP(S) address without a path or embedded credentials.');
+    }
+    return url;
+  }
+  private status(connected: boolean, message = ''): void {
+    this.connected = connected;
+    this.connectionError = message;
+    this.emit('status');
+  }
+  private async request(path: string, method = 'GET', body?: string): Promise<unknown> {
+    const controller = new AbortController();
+    this.requests.add(controller);
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const response = await fetch(new URL(path, this.baseUrl()).toString(), {
+        method, body, signal: controller.signal,
+        headers: { Authorization: `Basic ${Buffer.from(`${this.username}:${this.password}`, 'utf8').toString('base64')}`,
+          ...(body === undefined ? {} : { 'Content-Type': 'text/plain' }) },
+      });
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error('Local API access denied. Check the username/password and enable local API access for that user on the System Access Point.');
+        }
+        throw new Error(`The System Access Point returned HTTP ${response.status}.`);
+      }
+      const text = await response.text();
+      if (!text.trim()) {
+        if (method === 'GET') { throw new Error('The local API returned an empty configuration.'); }
+        return undefined;
+      }
+      try { return JSON.parse(text); }
+      catch { throw new Error('The local API returned invalid JSON.'); }
+    } catch (error) {
+      if (controller.signal.aborted) { throw new Error('The System Access Point request timed out or was cancelled.'); }
+      if (error instanceof Error && error.name === 'FetchError') {
+        throw new Error('Cannot reach the System Access Point. Check its address and network connection.');
+      }
+      throw error;
+    } finally { clearTimeout(timeout); this.requests.delete(controller); }
+  }
+  async refresh(): Promise<void> {
+    if (!this.username || !this.password || !this.host) { throw new Error('Configure the System Access Point and local API credentials in app settings.'); }
+    if (this.refreshing) { return this.refreshing; }
+    const generation = this.generation;
+    const updates: Array<{ systemId: string; parts: string[]; value: string }> = [];
+    this.bufferedUpdates = updates;
+    const pending = (async () => {
+      const configuration = parseConfiguration(await this.request('/fhapi/v1/api/rest/configuration'));
+      if (generation !== this.generation) { throw new Error('Connection settings changed during discovery.'); }
+      const unsupported = new Set<string>();
+      const devices: Device[] = [];
+      for (const channel of configuration) {
+        const Model = models[channel.deviceType];
+        if (!Model) { unsupported.add(channel.deviceType); continue; }
+        const previous = this.devices.find(device => device.configuration.systemId === channel.systemId && device.id === channel.id && device.channel === channel.channel && device.constructor === Model);
+        if (previous) { previous.applyConfiguration(channel); devices.push(previous); }
+        else { devices.push(new Model(this, channel)); }
+      }
+      this.devices = devices;
+      for (const update of updates) {
+        this.devices.find(device => device.configuration.systemId === update.systemId && device.id === update.parts[0] && device.channel === update.parts[1])?.handleUpdate(update.parts[2], update.value);
+      }
+      this.discoverySummary = `Found ${devices.length} supported channels out of ${configuration.length}.` +
+        (unsupported.size ? ` Unsupported function IDs: ${Array.from(unsupported).sort().join(', ')}.` : '');
+      this.emit('devices');
+    })();
+    this.refreshing = pending;
+    try { await pending; } finally {
+      if (this.refreshing === pending) { this.refreshing = undefined; }
+      if (this.bufferedUpdates === updates) { this.bufferedUpdates = undefined; }
     }
   }
-
-  async updateLogin(
-    host: string,
-    username: string,
-    password: string,
-  ): Promise<void> {
-    if (host && username && password) {
-      this.host = host;
-      this.username = username;
-      this.password = password;
-      this._login =
-        'Basic ' +
-        Buffer.from(username + ':' + password, 'utf8').toString('base64');
-      this.stopListen();
-      await this.loadDevices();
-      this.listen();
-    }
-  }
-
   async start(): Promise<void> {
-    if (this._login) {
-      await this.loadDevices();
-      this.listen();
+    if (!this.username || !this.password || !this.host) {
+      this.status(false, 'Configure the System Access Point and local API credentials in app settings.');
+      return;
     }
+    this.active = true;
+    await this.connect();
   }
-
-  /**
-   * Normalise a functionID value from the API.
-   * The SysAP returns hex strings like "0007" (already 4 chars) but some
-   * firmware versions return short forms like "7". We zero-pad to 4 chars
-   * and uppercase so "7", "07", "0007", "0007" all compare correctly.
-   */
-  private static normaliseFunctionId(fid: string): string {
-    if (fid == null) return '';
-    const trimmed = String(fid).trim().toUpperCase();
-    // Already a 4-char hex like "0007"
-    if (/^[0-9A-F]{4}$/.test(trimmed)) return trimmed;
-    // Short decimal or hex — parse as integer then format as 4-hex
-    const num = parseInt(trimmed, 16);
-    if (!Number.isNaN(num)) {
-      return num.toString(16).toUpperCase().padStart(4, '0');
-    }
-    // Fallback: just pad the raw string
-    return trimmed.padStart(4, '0');
+  async updateLogin(host: string, username: string, password: string): Promise<void> {
+    this.stopListen();
+    this.host = host; this.username = username; this.password = password;
+    this.devices = [];
+    this.discoverySummary = 'No configuration has been loaded yet.';
+    this.emit('devices');
+    await this.start();
   }
-
-  async getConfiguration(): Promise<any[]> {
-    const req = await fetch(
-      'http://' + this.host + '/fhapi/v1/api/rest/configuration',
-      {
-        headers: {
-          Authorization: this._login,
-        },
-      },
-    );
-    const resp: any = await req.json();
-    return Object.entries(
-      resp['00000000-0000-0000-0000-000000000000'].devices,
-    ).flatMap(([id, device]: [string, any]) => {
-      return Object.entries(device.channels).flatMap(
-        ([key, channel]: [string, any]) => {
-          return {
-            id: id,
-            channel: key,
-            name: channel.displayName,
-            deviceType: channel.functionID,
-            datapoints: {
-              ...Object.fromEntries(
-                Object.entries(channel.inputs).map(([k, i]: [string, any]) => {
-                  return [k, i.value];
-                }),
-              ),
-              ...Object.fromEntries(
-                Object.entries(channel.outputs).map(
-                  ([k, i]: [string, any]) => {
-                    return [k, i.value];
-                  },
-                ),
-              ),
-            },
-          };
-        },
-      );
-    });
+  private scheduleReconnect(): void {
+    if (!this.active || this.reconnectTimer) { return; }
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = undefined;
+      this.connect().catch(error => this.emit('diagnostic', error instanceof Error ? error.message : String(error)));
+    }, this.reconnectDelay);
+    this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000);
   }
-
-  async loadDevices(): Promise<void> {
-    const devices = await this.getConfiguration();
-    this.devices = devices
-      .map((device: any): Device | null => {
-        const fid = Client.normaliseFunctionId(device.deviceType);
-
-        switch (fid) {
-          case FID.SWITCH_ACTUATOR:
-            return new Switch(
-              this,
-              device.id,
-              device.channel,
-              device.name,
-              fid,
-              device.datapoints,
-            );
-          case FID.DIMMING_ACTUATOR:
-            return new Dimmer(
-              this,
-              device.id,
-              device.channel,
-              device.name,
-              fid,
-              device.datapoints,
-            );
-          case FID.ROOM_TEMP_CONTROLLER:
-            return new Thermostat(
-              this,
-              device.id,
-              device.channel,
-              device.name,
-              fid,
-              device.datapoints,
-            );
-          case FID.SCENE_SENSOR:
-            return new SceneSensor(
-              this,
-              device.id,
-              device.channel,
-              device.name,
-              fid,
-              device.datapoints,
-            );
-          case FID.SHUTTER_ACTUATOR:
-            return new Shutter(
-              this,
-              device.id,
-              device.channel,
-              device.name,
-              fid,
-              device.datapoints,
-            );
-          case FID.BLIND_ACTUATOR:
-            return new Blind(
-              this,
-              device.id,
-              device.channel,
-              device.name,
-              fid,
-              device.datapoints,
-            );
-          case FID.MOVEMENT_DETECTOR:
-            return new MovementDetector(
-              this,
-              device.id,
-              device.channel,
-              device.name,
-              fid,
-              device.datapoints,
-            );
-          case FID.WINDOW_DOOR_SENSOR:
-            return new ContactSensor(
-              this,
-              device.id,
-              device.channel,
-              device.name,
-              fid,
-              device.datapoints,
-            );
-          default:
-            return null;
-        }
-      })
-      .filter((e): e is Device => e !== null);
-  }
-
-  /**
-   * Connect to the SysAP websocket with exponential backoff reconnection.
-   * Instead of reconnecting immediately on close (which can spam the server),
-   * we wait with exponential backoff: 1s, 2s, 4s, 8s, ... up to 30s max.
-   */
-  listen(): void {
-    this._shouldReconnect = true;
-    this._connect();
-  }
-
-  private _connect(): void {
-    if (!this._shouldReconnect) return;
-
-    this._connection = new ws('ws://' + this.host + '/fhapi/v1/api/ws', {
-      headers: {
-        Authorization: this._login,
-      },
-    });
-
-    this._connection.onopen = () => {
-      // Reset backoff on successful connection
-      this._reconnectDelay = INITIAL_RECONNECT_DELAY;
-    };
-
-    this._connection.onmessage = (event: ws.MessageEvent) => {
-      const parsed = JSON.parse(event.data as string)?.[
-        '00000000-0000-0000-0000-000000000000'
-      ]?.datapoints;
-      if (parsed) {
-        Object.entries(parsed).forEach(
-          ([key, value]: [string, any]) => {
-            const parts = key.split('/');
-            if (parts.length < 3) return;
-            const device = this.devices?.find(
-              (e) => e.id === parts[0] && e.channel === parts[1],
-            );
-            if (device) {
-              device.handleUpdate(parts[2], value);
+  private async connect(): Promise<void> {
+    if (!this.active || this.connection) { return; }
+    if (this.connecting) { return this.connecting; }
+    const generation = this.generation;
+    const pending = (async () => {
+      try {
+        await this.refresh();
+        if (!this.active || generation !== this.generation) { return; }
+        const url = new URL('/fhapi/v1/api/ws', this.baseUrl());
+        url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+        const socket = new ws(url.toString(), { handshakeTimeout: 10000,
+          headers: { Authorization: `Basic ${Buffer.from(`${this.username}:${this.password}`, 'utf8').toString('base64')}` } });
+        this.connection = socket;
+        const current = () => this.active && this.generation === generation && this.connection === socket;
+        let alive = true;
+        socket.on('pong', () => { alive = true; });
+        socket.on('open', () => {
+          if (!current()) { return; }
+          // Reload after opening so changes during the reconnect gap are not missed.
+          this.refresh().then(() => {
+            if (!current()) { return; }
+            this.reconnectDelay = 1000;
+            this.status(true);
+          }).catch(error => {
+            if (current()) { this.status(false, error instanceof Error ? error.message : String(error)); socket.terminate(); }
+          });
+          this.heartbeat = setInterval(() => {
+            if (!current()) { return; }
+            if (!alive) { this.status(false, 'The System Access Point stopped responding. Reconnecting…'); socket.terminate(); return; }
+            alive = false; socket.ping();
+          }, 20000);
+        });
+        socket.on('message', (data: ws.RawData) => {
+          if (!current()) { return; }
+          try {
+            const text = Array.isArray(data) ? Buffer.concat(data).toString('utf8') : Buffer.isBuffer(data) ? data.toString('utf8') : Buffer.from(data).toString('utf8');
+            const message: unknown = JSON.parse(text);
+            if (!isRecord(message)) { throw new Error('Invalid WebSocket message.'); }
+            for (const [systemId, system] of Object.entries(message)) {
+              if (!isRecord(system) || !isRecord(system.datapoints)) { continue; }
+              for (const [path, raw] of Object.entries(system.datapoints)) {
+                const parts = path.split('/');
+                const value = scalar(raw);
+                if (parts.length !== 3 || value === undefined) { continue; }
+                this.bufferedUpdates?.push({ systemId, parts, value });
+                const device = this.devices.find(device => device.configuration.systemId === systemId && device.id === parts[0] && device.channel === parts[1]);
+                device?.handleUpdate(parts[2], value);
+              }
             }
-          },
-        );
-      }
-    };
-
-    this._connection.onerror = (_event: ws.ErrorEvent) => {
-      // Error will be followed by close; backoff handled in onclose
-    };
-
-    this._connection.onclose = (_event: ws.CloseEvent) => {
-      this._connection = undefined;
-      if (this._shouldReconnect) {
-        // Schedule reconnect with backoff
-        if (this._reconnectTimer) {
-          clearTimeout(this._reconnectTimer);
+          } catch { this.emit('diagnostic', 'Ignored an invalid local API WebSocket message.'); }
+        });
+        socket.on('error', () => { if (current()) { this.status(false, 'The connection to the System Access Point failed. Reconnecting…'); } });
+        socket.on('close', () => {
+          if (!current()) { return; }
+          if (this.heartbeat) { clearInterval(this.heartbeat); this.heartbeat = undefined; }
+          this.connection = undefined;
+          this.status(false, this.connectionError || 'Connection lost. Reconnecting to the System Access Point…');
+          this.scheduleReconnect();
+        });
+      } catch (error) {
+        if (this.active && generation === this.generation) {
+          this.status(false, error instanceof Error ? error.message : String(error));
+          this.scheduleReconnect();
         }
-        this._reconnectTimer = setTimeout(() => {
-          this._connect();
-        }, this._reconnectDelay);
-        // Exponential backoff with cap
-        this._reconnectDelay = Math.min(
-          this._reconnectDelay * 2,
-          MAX_RECONNECT_DELAY,
-        );
+        throw error;
       }
-    };
+    })();
+    this.connecting = pending;
+    try { await pending; } finally { if (this.connecting === pending) { this.connecting = undefined; } }
   }
-
   stopListen(): void {
-    this._shouldReconnect = false;
-    if (this._reconnectTimer) {
-      clearTimeout(this._reconnectTimer);
-      this._reconnectTimer = null;
-    }
-    if (this._connection) {
-      this._connection.close();
-      this._connection = undefined;
-    }
+    this.active = false; this.generation++;
+    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = undefined; }
+    if (this.heartbeat) { clearInterval(this.heartbeat); this.heartbeat = undefined; }
+    const socket = this.connection; this.connection = undefined;
+    socket?.terminate();
+    for (const controller of this.requests) { controller.abort(); }
+    this.refreshing = undefined; this.bufferedUpdates = undefined; this.connecting = undefined; this.reconnectDelay = 1000;
+    this.status(false, 'The free@home connection is stopped.');
   }
-
-  async setValue(
-    device: string,
-    channel: string,
-    datapoint: string,
-    value: any,
-  ): Promise<any> {
-    const req = await fetch(
-      'http://' +
-        this.host +
-        '/fhapi/v1/api/rest/datapoint/00000000-0000-0000-0000-000000000000/' +
-        device +
-        '.' +
-        channel +
-        '.' +
-        datapoint,
-      {
-        method: 'PUT',
-        headers: {
-          Authorization: this._login,
-          'Content-Type': 'text/plain',
-        },
-        body: value,
-      },
-    );
-    const resp: any = await req.json();
-    return resp;
+  async setValue(device: ResourceDevice, datapoint: string, value: string): Promise<void> {
+    if (!this.connected || !this.devices.some(candidate => candidate === device)) { throw new Error(this.connectionError || 'This device is no longer available.'); }
+    const configuration = device.configuration;
+    const path = [configuration.systemId, `${configuration.id}.${configuration.channel}.${datapoint}`].map(encodeURIComponent).join('/');
+    const result = await this.request(`/fhapi/v1/api/rest/datapoint/${path}`, 'PUT', value);
+    if (isRecord(result) && (result.error || result.success === false)) { throw new Error('The System Access Point rejected the command.'); }
   }
 }

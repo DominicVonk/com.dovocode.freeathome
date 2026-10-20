@@ -1,12 +1,14 @@
 {
   "name": "com.dovocode.freeathome",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "main": "app.ts",
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "npm run build && node --test test/*.test.js",
+    "validate": "homey app validate",
+    "build:homey": "homey app build"
   },
   "devDependencies": {
-    "@tsconfig/node12": "^1.0.11",
     "@types/homey": "npm:homey-apps-sdk-v3-types@0.3.1",
     "@types/node": "^18.8.5",
     "@types/node-fetch": "^2.6.1",
