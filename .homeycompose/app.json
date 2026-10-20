@@ -1,7 +1,7 @@
 {
   "id": "com.dovocode.freeathome",
-  "version": "1.0.2",
-  "compatibility": ">=5.0.0",
+  "version": "2.0.0",
+  "compatibility": ">=8.0.0",
   "sdk": 3,
   "platforms": [
     "local"
@@ -13,7 +13,9 @@
     "en": "Making home automation easier than ever"
   },
   "category": [
-    "lights"
+    "lights",
+    "climate",
+    "security"
   ],
   "permissions": [],
   "images": {

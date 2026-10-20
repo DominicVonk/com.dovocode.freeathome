@@ -2,5 +2,47 @@
     "settings": {
         "title": "Settings Page",
         "subtitle": "Please log in"
+    },
+    "drivers": {
+        "dimmer": {
+            "name": {
+                "en": "Dimmer"
+            },
+            "description": {
+                "en": "Dimmable light actuator"
+            }
+        },
+        "shutter": {
+            "name": {
+                "en": "Shutter"
+            },
+            "description": {
+                "en": "Shutter actuator for window coverings"
+            }
+        },
+        "blind": {
+            "name": {
+                "en": "Blind"
+            },
+            "description": {
+                "en": "Blind actuator with tilt control"
+            }
+        },
+        "movement": {
+            "name": {
+                "en": "Movement Sensor"
+            },
+            "description": {
+                "en": "Motion detector sensor"
+            }
+        },
+        "contact": {
+            "name": {
+                "en": "Window/Door Sensor"
+            },
+            "description": {
+                "en": "Window or door contact sensor"
+            }
+        }
     }
 }

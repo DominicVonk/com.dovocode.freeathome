@@ -7,5 +7,8 @@
   },
   "1.0.2": {
     "en": "Docs"
+  },
+  "2.0.0": {
+    "en": "Add dimmers, shutters, blinds, movement and contact sensors. Fix discovery errors and missing-device crashes; recover automatically from network failures with current device state. Validate local API responses and commands, preserve existing pairings, and correct device controls. Requires Homey 8.0+."
   }
 }

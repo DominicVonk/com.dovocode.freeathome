@@ -1,7 +1,29 @@
 {
-  "extends": "@tsconfig/node12/tsconfig.json",
   "compilerOptions": {
+    "target": "es2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "outDir": "./.homeybuild",
+    "declaration": false,
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
     "allowJs": true,
-    "outDir": "build/"
-  }
+    "resolveJsonModule": true,
+    "types": [
+      "node",
+      "homey"
+    ]
+  },
+  "include": [
+    "lib/**/*.ts",
+    "app.ts",
+    "drivers/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "build",
+    ".homeybuild"
+  ]
 }

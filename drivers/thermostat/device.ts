@@ -1,87 +1,15 @@
-import { Thermostat } from '@dominicvonk/fah/dist/Thermostat';
-import Homey from 'homey';
-import MyApp from '../../app';
+import { Thermostat, Device } from '../../lib';
+import { HomeyResourceDevice, CapabilityState } from '../../lib/homey/ResourceDevice';
 
-class MyDevice extends Homey.Device {
-
-  /**
-   * onInit is called when the device is initialized.
-   */
-  async onInit () {
-    this.log('MyDevice has been initialized');
-
-    let thermostat: Thermostat = (((this.homey.app as MyApp)._client?.devices?.find(e => e.id == this.getData().serialNumber && e.channel == this.getData().channel)) as Thermostat)!;
-
-
-    this.setCapabilityValue("onoff", thermostat.getHeatingEnabled());
-    this.setCapabilityValue("measure_temperature", thermostat.getCurrentTemperature())
-    this.setCapabilityValue("target_temperature", thermostat.getTargetTemperature())
-    this.registerCapabilityListener("onoff", async (value) => {
-      if (value) {
-        await thermostat.enableAutoHeating();
-      } else {
-        await thermostat.disableHeating();
-      }
-    });
-    this.registerCapabilityListener("target_temperature", async (value) => {
-      await thermostat.setTargetTemperature(value);
-    });
-
-
-    thermostat.on(Thermostat.HEATING_TURNED_ON, () => {
-      this.setCapabilityValue("onoff", true);
-    })
-
-    thermostat.on(Thermostat.HEATING_TURNED_OFF, () => {
-      this.setCapabilityValue("onoff", false);
-    })
-
-    thermostat.on(Thermostat.TARGET_TEMPERATURE_CHANGED, () => {
-
-      this.setCapabilityValue("target_temperature", thermostat.getTargetTemperature())
-    })
-
-    thermostat.on(Thermostat.TEMPERATURE_CHANGED, () => {
-
-      this.setCapabilityValue("measure_temperature", thermostat.getCurrentTemperature())
-    });
-
+class MyDevice extends HomeyResourceDevice<Thermostat> {
+  protected matches(device: Device): device is Thermostat { return device instanceof Thermostat; }
+  protected state(device: Thermostat): CapabilityState {
+    const target = device.getTargetTemperature();
+    return { onoff: device.getHeatingEnabled(), target_temperature: target !== null && target >= 7 && target <= 35 ? target : null, measure_temperature: device.getCurrentTemperature(), thermostat_mode_mh: device.getMode() }; }
+  protected registerControls(): void {
+    this.registerCapabilityListener('onoff', async (value: boolean) => { const device = this.getResource(); await (value ? device.enableAutoHeating() : device.disableHeating()); });
+    this.registerCapabilityListener('target_temperature', async (value: number) => this.getResource().setTargetTemperature(value));
+    this.registerCapabilityListener('thermostat_mode_mh', async (value: string) => this.getResource().setMode(value));
   }
-  /**
-   * onAdded is called when the user adds the device, called just after pairing.
-   */
-  async onAdded () {
-    this.log('MyDevice has been added');
-  }
-
-  /**
-   * onSettings is called when the user updates the device's settings.
-   * @param {object} event the onSettings event data
-   * @param {object} event.oldSettings The old settings object
-   * @param {object} event.newSettings The new settings object
-   * @param {string[]} event.changedKeys An array of keys changed since the previous version
-   * @returns {Promise<string|void>} return a custom message that will be displayed
-   */
-  async onSettings ({ oldSettings: { }, newSettings: { }, changedKeys: { } }): Promise<string | void> {
-    this.log('MyDevice settings where changed');
-  }
-
-  /**
-   * onRenamed is called when the user updates the device's name.
-   * This method can be used this to synchronise the name to the device.
-   * @param {string} name The new name
-   */
-  async onRenamed (name: string) {
-    this.log('MyDevice was renamed');
-  }
-
-  /**
-   * onDeleted is called when the user deleted the device.
-   */
-  async onDeleted () {
-    this.log('MyDevice has been deleted');
-  }
-
 }
-
 module.exports = MyDevice;
