@@ -1,0 +1,13 @@
+Material Design Icons by Pictogrammers
+Source: https://github.com/Templarian/MaterialDesign
+Source revision: 2424e748e0cc63ab7b9c095a099b9fe239b737c0
+
+The following unmodified SVG icons and generated PNG renditions are distributed under the Apache License, Version 2.0 (see licenses/Apache-2.0.txt):
+
+lightswitch: light-switch — Matthias de Baat
+dimmer: lightbulb-on-outline — Austin Andrews
+thermostat: thermostat — Google
+shutter: window-shutter — idevo89
+blind: blinds-horizontal — Google
+movement: motion-sensor — Simran
+contact: door-closed — Haley Halcyon
